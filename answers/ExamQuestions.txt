@@ -1,0 +1,385 @@
+1.1 Concurrency vs. Parallelism
+
+A concurrent system can support multiple tasks running at the same time. The execution of the tasks need not be processed at the same time - the execution task can be interrupted by another task, but to be concurrent, the task needs to be able to resume where it left off after interruption.
+A parallel system, on the other hand, supports the execution of multiple tasks happening simultaneously in real time. In practice, this is usually achieved by delegating a thread to each task, which can run on seperate cores/processing units.
+A parallel system is necessarily also concurrent.
+
+1.2 Fork-Join Parallelism
+
+A single master thread continuously persists through the program.
+When not in a parallel region, the thread simply executes its code sequentially, as any other thread would.
+A parallel region is entered when the master thread splits (forks) into a number of threads. These threads run in parallel until all threads have completed their task. The threads are then joined, and the master thread resumes execution sequentially until the next parallel region.
+
+1.3 Virtual Memory
+
+Virtual memory is the technique in which the operating system provides the currently running program with the illusion that it is currently the only process using any memory.
+To do this, the operating system must provide the program with a set of virtual addresses it can use, and it must then translate these virtual addresses into actual phyical addresses on hardware whenever the program uses one of these addresses.
+This provides a layer of abstraction in which the program does not need to know or care about which addresses it actually uses, making running programs much less prone to error and making interference in memory between programs impossible.
+
+1.4 Plenty of Room at the Top
+
+Moore's law, while it has experimentally held true for the past few decades, is rapidly approaching its end. Current processors are already very close to the physical limit of how small microprocessors can be, after which further improvement becomes impossible.
+However, while the hardware itself can will reach its limit soon, the same is not true of the many steps between the smallest hardware unit and a functional program.
+By creating more simple, efficient processors, and embedding the processors into a more streamlined overall architecture, the efficiency of low-level assembly code can still be drastically improved, which will affect code written in any language.
+Similarly, finding new, more efficient algorithms to solve problems will always be a source of improvement, particularly for any problem where a proven lower-limit bound has not yet been implemented in code.
+Finally, while the process of generalizing and abstracting code makes it much more understandable to humans, it also removes it further from the underlying hardware at each such step, creating more and more bloated code to run through.
+By instead writing software much closer to the hardware it is built on, the efficiency can be improved manyfold.
+
+2.1 False Sharing
+
+A cache line is the smallest unit of memory that can be transferred between the main memory and the cache. When a value on such a cache line is changed, then the cache line is invalidated and any other process using the same cache line are forced to update their cache.
+This can be a problem when multiple variables are on the same cache line, but are used independently for calculations. If multiple threads are accessing and modifying variables on the same cache line, then each such modification will cause the cache to be invalidated and force an update.
+If each thread is using a different variable within the cache line, however, then these updates shouldn't be necessary: each forced update only updates a part which was already irrelvant for the thread to begin with.
+This problem is termed false sharing, as the threads shouldn't be sharing the same cache line to begin with.
+
+2.2 Mutual Exclusion
+
+A race condition occurs when multiple threads attempt to modify the same variable. If the value of the variable is changed in the time between the read and write of a thread, then the change is simply overwritten (lost update).
+To prevent such a situation from happening, mutual exclusion constructs can be used. These will lock the variable to be modified, so that only a single thread can access it. After the changes are complete, it can be unlocked again, allowing other threads to update it via the same procedure if necessary.
+
+2.3 Schedules
+
+A static schedule in OpenMP assigns each thread an equal amount of iterations in a parallelized for loop. Because the number of threads and iterations is known in advance, this distribution can be set at compile time and incurs no additional overhead.
+A dynamic schedule, on the other hand, assigns chunks of iterations during runtime. When a thread is finished with the current chunk of iterations, it can request to receive another chunk to work on. This is useful if the workload in the iterations vary wildly, but requires additional processing overhead.
+
+2.4 Preventing Unneccesary Work (for-Loop)
+
+We can define a shared boolean variable that signals whether a thread has already found a solution. If this variable is set to true, then all threads should just run through the loop until the end without doing any work by using continue.
+If it is false, then each thread can work on finding a solution until one is found, in which case they set the boolean to true.
+This method still incurs some overhead, since the loop index increments and continue statements continue to be executed.
+
+3.1 Ordered
+
+The ordered clause allows the programmer to specify parts of a for loop which should be executed as if it were sequential, not parallelized.
+That is to say, when a thread encounters an ordered region, it must first wait for all iterations with a lower iteration in other threads to execute first before it can execute the code in the region itself.
+For this reason, small chunk sizes should be preferred, as large chunks will force a single thread to handle multiple sequential iterations, while the other threads wait idle at the start of the ordered region.
+
+3.2 Collapse
+
+The collapse clause will treat multiple nested for loops following it (up to a specified depth) as a single loop for the purposes of parallelization.
+This is particularly useful if the outermost loops have a low number of iterations and can't fully take advantage of the number of threads available.
+
+3.3 Reductions
+
+The reduction clause allows a large computation using an associative and commutative operator across many values to be split across multiple threads.
+Internally, each thread copies each specified list variable and initializes it with a neutral element for the operator.
+Once each thread has completed a part of the computation on this local variable, the local values are combined with each other using the operator to calculate the final result.
+The operators supported by default are +, -, *, &, |, ^, &&, ||, min, max.
+
+3.4 Barriers
+
+A barrier forces every thread to reach the point in code specified by the barrier before execution is allowed to resume.
+This can be used to ensure the correctness of a parallelized program, as later parts of the program could rely on previous results being fully calculated.
+
+3.5 Library Routines
+
+omp_get_num_threads() returns the amount of threads currently active at the time.
+omp_get_num_procs() returns the number of logical cores available to the system. This is equivalent to the amount of threads a program could possibly run at the same time.
+omp_get_max_threads() returns the number of threads the program can currently run at the same time. This can changed set using omp_set_num_threads(), whereas the number of logical cores will never change.
+
+3.6 Private and Firstprivate
+
+The private clause causes each thread to create a local unitialized copy of a given variable. This local variable should manually be initialized before further work to avoid undefined behaviour.
+The firstprivate clause instead causes each thread to create a local copy of a given variable, initialized to the same value the variable is holding at the time.
+
+4.1 Parallelizing Divide and Conquer with Tasks
+
+Tasks allow us to define a "packet" of work for a thread to complete, and tasks can also be recursively defined within tasks. By assigning the recursive subproblems to tasks, we can quickly parallelize each such recursion into its own thread.
+In order to achieve a correct solution, we must ensure that we wait for all subtasks to complete with the taskwait clause before merging the results of the subproblems.
+
+4.2 Speeding up Merge Sort
+
+The simplest gain in speed can be achieved by parallelizing the algorithm (e.g. with tasks as described above).
+Some optimisations can also be considered when the input array is small enough:
+ - For a very small n, the recursion in divide and conquer algorithms can lead to a lower efficiency when compared to a simple sequential algorithm (e.g. Insertion Sort)
+ - For small n, it is more efficient to allocate memory on the stack rather than the heap
+  - As an alternative, utilising only a single input buffer of size n can be even more efficient
+ - Creating a task for every recursion is inefficient for small n, they can be handled by the same thread instead
+
+4.3 Multithreaded Merging
+
+For multithreaded merging, yet another divide and conquer algorithm can be implemented.
+Given two arrays to merge, select the median from the larger (in size) array.
+The output is the recursive merge of all elements smaller than the median from both arrays, followed by the median, followed by the recursive merge of all elements larger than the median from both arrays.
+
+5.1 CMake
+
+CMake is a build file generator which can generate build files for multiple platforms. These files can then be used by a compiler to build executable binaries.
+In addition, CMake includes tools to test and package software.
+The CMake language is a scripting language with one command per line and no return values. Despite these restrictions, it is a full-fledged language and is Turing complete.
+
+5.2 CMake Targets
+
+Targets in CMake are the executables and libraries we wish to include in our build files.
+The usage of targets in CMake is comparable to OOP, with targets as objects, constructor methods to initialize them (add_executable() and add_library()), and properties (member variables) that we can directly set or modify with member functions.
+
+5.3 Code Optimization
+
+Test driven development (TDD) is also a well-known paradigm to ensure correctness of code when creating and optimizing:
+
+1. Decide on a feature to implement
+2. Create unit tests covering the behaviour the new feature should fulfill
+3. Implement the feature, rewriting it until it passes the new tests
+4. Once all features are implemented, optimization can begin
+5. Find a piece of code to optimize (e.g. via profiling) and rewrite the code incrementally, ensuring the code passes all tests at all times
+6. Repeat 5 until perfomance is satisfactory
+
+6.1 Characteristics of Different Vector Instruction Sets
+
+There are mainly three different vector instruction sets currently in use:
+
+SSE (Streaming SIMD Extensions)
+AVX (Advanced Vector Extensions)
+AVX-512, a further extension of AVX
+
+Different versions of SSE launched from 1999 throughout 2009. It defines a set of vector instructions for vectors 128 bits long, and originally only addressed 8 new registers (xmm0-xmm7). Later, another 8 registers were added (xmm8-xmm15).
+AVX and AVX2, launched in 2011 and 2013 respectively, instead worked on 256-bit registers (ymm0-ymm15). It also added a few new instructions, though most of them intended for use in efficiently converting legacy 128 bit instructions to the new 256 bit instructions.
+AVX-512, launched in 2017, further extended both the vector length to 512 bits, as well as adding 16 more registers for a total of 32 (zmm0-zmm31). In addition, a variety of new instructions were added, allowing for further optimisations.
+
+6.2 Memory Aliasing
+
+Memory aliasing is effectively a security mechanism of the compiler to prevent unwanted side effects.
+If two pointers/references are used in the same assignment, and it is possible that they point to the same part of memory, then it will not perform certain optimisations that could be influenced by such a situation.
+If a programmer is certain that the pointers are referencing distinct parts of memory with no overlap, then they may use the __restrict__ keyword to signal that memory aliasing is not applicable and optimisations may be performed.
+
+6.3 Strided Access
+
+If all the memory to be accessed is stored sequentially in memory (unit stride), then every single bit of data is used when reading the cache lines from memory.
+On the other hand, if the memory is stored equidistantly at greater intervals (e.g. stride-8), then most of the data read is immediately discarded, as only part of it is required for the current calculation.
+Therefore, unit stride will spend less time reading from memory, enabling a speed-up in execution.
+
+6.4 Structure of Arrays
+
+Continuing from the discussion on strided access, it is clear that elements intended to be used in the same calculation should be stored sequentially in memory. If these elements should (abstractly) belong to seperate objects, then it can be benificial to instead store them in a Structure of Arrays.
+This ensures that all elements of the same type, upon which calculations should be performed, are stored sequentially in an array, allowing for quicker memory access and even (automatic) vectorisation of the calculations.
+However, this ends up splitting the original object across multiple arrays, and it should thus be carefully considered. If access to a full object is required often in the program, then it could instead be detrimental to store them in as a SoA.
+
+7.1 Vectorization Clauses with #pragma omp simd
+
+The aligned clause allows the programmer to guarantee that the specified inputs are byte aligned to a specific number of bytes. This allows the compiler to heavily optimize vector calculations using those inputs, as it doesn't need to manually check for alignment and read appropriately.
+The safelen clause allows the setting of a vector width limit. If some vector caclulations in a loop depend on the results of previous iterations, then the vector width can be set to ensure correctness of the program when processing the loop.
+The reduction clause allows a reduction to be performed on a given vector, very similarly to the reduction clause defined for #pragma omp for loops. It has the same available operators, excluding min and max.
+
+7.2 Intrinsics vs Guided Vectorization
+
+Advantages: 
+- High amount of programmer control, the programmer knows exactly what vectorizations are being performed where in the program
+- Because the vectorization is explicitly specified, any architecture that can process those specific vectorizations will execute it in that fashion regardless of which compiler is used, leading to performance portable code
+
+Disadvantages:
+- Because intrinstic data types and functions are specific to various architectures, the code will only explicitly support certain architectures
+- This will mean that either the same function has to be written for a large amount of different architectures, or the code becomes less portable
+
+7.3 Intrinsics vs Assembly
+
+Advantages:
+- The programmer doesn't need to concern themselves with specific registers, just which instructions should be performed on which data. Intrinsics provide a wrapper for these instructions, making the code more readable at the same time
+- C++ code is more portable between different compilers and operating systems than specific assembly instructions
+
+7.4 Intrinsic Vector Data Types
+
+__m256 is a vector of 256 bits, which will be interpreted by all intrinsic functions using the type to be a vector of 8x 32-bit float numbers.
+__m256d is a vector of 256 bits, which will be interpreted by all intrinsic functions using the type to be a vector of 4x 64-bit float numbers.
+__m256i is a vector of 256 bits as integers, the specific interpretation of which will depend on the function suffix:
+- 32x 8-bit byte
+- 16x 16-bit short
+- 8x 32-bit int
+- 4x 64-bit long lomg
+- 2x 128 bit doublequadword
+Depending on the function, they may be interpreted as either signed or unsigned integers.
+
+8.1 Intrinsic Function Naming Conventions
+
+The names of intrinsic function generally follow the following format:
+_<vector_size>_<operation>_<suffix>,
+where
+<vector_size> specifies the size of the returned vector in bits, this size usually coincides with the release for a specific instruction set (see 6.1). There however are some functions for smaller vector sizes that were released in a later instruction sets, to allow developers to extend legacy code using the new functions.
+<operation> is a short identifier for the operation performed by the intrinsic function. This is often just a wrapper for a certain assembly function (e.g. add, sub, mul), but can be a more complicated compound function (e.g. fmadd, shuffle)
+<suffix> identifies the data type for the arguments of the function: ps for float, pd for double, epi<n> for signed integers and epu<n> for unsigned integers, where n is the bit-length that the vector should be divided into (see 7.4)
+
+8.2 Latency and Throughput
+
+The latency of an intrinsic function is the number of clock cycles needed from the call of the function until the result is fully calculated and available.
+The throughput of an intrinsic function is the number of clock cycles until the next input for an intrinsic of the same kind can be started. If the number is a fraction, then there are multiple independent logical units that can start the function in the same clock cycle.
+Even if a function has a high latency and is called multiple times, this weakness can be covered and almost nullified if it also has a low throughput, allowing for a pipeline to continuously calculate and return the next result each clock cycle.
+
+8.3 Instruction-Level Parallelism
+
+A modern processor has two ways of realizing instruction-level parallelism: the first is to allow an internal pipeline to be created, as in 8.2.
+The second is to expose multiple ports that may be capable of handling the same type of instruction, allowing for a calculation to take place on multiple units on the same processor simultaneously.
+
+8.4 Loop Unrolling
+
+Loop unrolling is a technique allows for the simultaneous execution of multiple iterations of a loop body on the single processor, exploiting the instruction-level parallelism available to the programmer.
+It achieves this by duplicating the loop body inside the loop and adjusting the number of iterations accordingly. This will compile into each iteration requiring the execution of multiple instructions, which can allow the processor to process these simultaneously, resulting in a speed-up.
+However, unrolling loops by too large a factor will drasticaclly increase compile time and program size, and can even completely fill out the instruction cache (as it somewhat violates temporal locality), which can even be detrimental to a program's speed instead.
+
+8.5 Instructions per Cycle
+
+Instructions per cycle is a measure of how efficiently the innate instruction-level parallelism of a processor is being used. A high IPC value means that multiple ports are being used with a high frequency, and within a single algorithm an implemention with a higher IPC will generally be faster.
+However, this does not mean that IPC is a measure of the performance of a program in general: if the algorithm is worse/requires more instructions in total, then it is entirely possible that the code with a higher IPC requires more time to complete.
+
+9.1 Bandwidth-Bound vs Compute-Bound
+
+Bandwidth-bound computations are those in which the main bottleneck to the execution of the computation is the loading/storing of data in memory. This means that the processor is often idle as it waits to receive the next data to perform computations on.
+It is particularly important to maximize temporal and spatial locality in these programs, as this while result in a much higher throughput of data.
+This is in contrast to compute-bound computations, where the main bottleneck is simply the processor itself not being able to keep up with the computations.
+Possible solutions include threading to incorporate more cores into the computation, or reformulating the algorithm in a way that reduces complexity or allows for more efficient assembly instructions to be performed.
+
+9.2 Temporal Locality and Spatial Locality
+
+Temporal locality refers to performing calculations utilizing the same data in the same place in the program. This ensures that the values, once loaded into the cache, can be read multiple times from that cache without reloading it, and only freeing the cache once the use for that data has expired.
+Temporal locality therefore minimizes the amount of cache loads needed by using the same element of a cache load multiple times.
+Spatial locality refers to keeping data that is used in the same calculation in the same place in memory. This allows a single cache line to contain multiple values required for a given calculation, reducing the amount of cache loads required dramatically.
+Spatial locality therefore minimizes the amount of cache loads needed by maximizing the amount of elements used in a single cache load.
+
+9.3 Data-Oriented Design vs Object-Oriented Design
+
+Object-oriented design is a programming paradigm which aims to maximize the ease of creation and readability of programs by modelling parts of the program in abstract containers (often called classes) are stored in an Array of Structures, similar to how a human often categorizes information in the real world.
+Data-oriented design, in contrast, aims to maximize efficiency of a program by attempting to transform input bytes into the desired output bytes with the least amount of processor and data overhead as possible. To that end, Structures of Arrays are often instead used to maximize spatial locality.
+
+9.4 Streaming Stores
+
+Streaming stores allow the processor to directly write the results of a calculation into memory, rather than first sending it back through the various cache levels. To use this effectively, however, several conditions must be met:
+- The data to be stored is not read before writing (as otherwise the cache lines will be invalidated by the update, propogating the change back through the cache levels with increased overhead)
+- The data to be stored is not needed shortly after being written (a read will load the data into the various cache levels, nullifying the effect of the streaming store to no benefit)
+- The computation is bandwidth-bound (if it is compute-bound, the additional overhead for the processor to perform the streaming store cannot be justified)
+
+9.5 Intel CPU Cache Hierarchy
+
+Each core typically has to L1 caches, an i-cache (for instructions) and a d-cache (for data, to be loaded into registers).
+The next L2 cache in each core is unified, storing both the instructions and the data.
+The L3 cache (also unified) is shared by all the cores, and lies between the L2 cache on each core and the main memory.
+Each cache reads cache lines into the hardware equivalent of a hash table (with a length given by the amount of Sets in the cache), though the amount of elements that can be stored for a given hash is limited (the limit is given by the Associativity of the cache).
+
+9.6 Cache Misses
+
+Cache misses are a term for various events that can occur when attempting to read data from a cache that can lead to a suboptimal usage of the cache system.
+A compulsory miss occurs when a block of memory is accessed by the processor for the first time, and, after failing to find that block in the cache, must be loaded into the caches first.
+A conflict miss occurs when a block of memory is loaded into the cache, but has to replace another cache line that is already loaded (see the hash table analogy), even when other empty spaces are still available in that cache.
+A capacity miss occurs when every single line of the cache is filled, leading to a situation where every subsequent load will have to replace some cache line.
+
+10.1 Compiler Flags
+
+-Wall will enable all of the compiler's warning messages, including non-critical ones such as potentially unsafe typecasts.
+-g will generate debug information that can be later used by debugging or profiling tools.
+-fsanitize=address will detect out-of-bounds access in arrays, usage of already freed memory (= garbage reads) and memory leaks (memory that should be deallocated).
+-fsanitize=undefined will detect undefined behaviour at runtime, such as integer over-/underflows.
+
+10.2 Intel oneAPI
+
+Intel oneAPI is a set of tools released by Intel, including profilers for performance metrics, debuggers and more.
+These tools can detect and analyze a variety of problems and metrics (such as deadlocks and race conditions in multi-threaded applications, how efficiently the program uses the current hardware, program hotspots, etc.)
+Usage of these tools could vastly speed up the discovery of bugs and aid in understanding which parts of a program would most heavily benefit from a speed-up, allowing for quicker development and optimization.
+
+10.3 Premature Optimization is the Root of All Evil
+
+This famous quote puts into dramatic words a very reasonable guideline: optimization should be reserved for after the program has been thoroughly tested and analyzed.
+Optimized code nearly always harder to read and maintain and introduces a further source of errors, as it contorts the program into a very specific execution.
+In addition, optimizing without knowledge of the hotspots of a program is a waste of time, as speeding up a function accounting for a tiny fraction of the programs will bring no tangible benefit.
+
+11.1 Cython
+
+Cython is a compiled language which allows the programmer to speed up Python code by interfacing with C/C++ libraries and compiling Cython files to C/C++ files which can imported in pieces of Python code.
+As Cython is a superset of Python, valid Python code is also valid in Cython, allowing the programmer to start with a base Python file and speed it up by adding various Cython directives and using parts of the C/C++ libraries.
+
+11.2 Accerating Python Programs with Cython
+
+First, the program hotspots should be ascertained by profiling the execution of the program. After the slowest parts of the program have been identified, these parts can be sped up by instead rewriting them in Cython and importing them into the orignal Python code.
+These Cython rewrites can use various parts of the C/C++ libraries, most notably types can be defined for various variables, allowing the usual compiler optimizations to take place now that the type is locked in.
+If a function can be completely rewritten so that no Python objects are created between the definition and the return of the function, then the code will in effect run no slower than a piece of C/C++ code, often leading to a speed-up factor in the 100s or 1000s.
+
+11.3 Compiling Cython Files
+
+Compiling Cython files for use in a larger, local Python project is best achieved using the cythonize command. This will compile the .pyx (or .py) Cython file into a C/C++ file, and from there into an extension module which other Python files in the project can then directly import.
+For Python code in Jupyter notebooks, Cython code can also be compiled directly in the notebooks by using %load_ext cython. This will allow for various cell magic commands to be used, most notably %%cython to compile the cell in Cython rather than Python.
+
+11.4 Cython Compiler Directives
+
+cython: boundscheck is a directive allowing for the setting of a boolean which will define whether or not the program will check for the overstepping of array bounds at runtime. Setting it to False will disable these checks, allowing for a speed-up of a program.
+cython: cdivision is another directive for setting a boolean, this time checking whether or not a division is dividing by zero. Setting it to True will handle division as if it were division in C, therefore not checking for division by zero and speeding up the execution.
+
+11.5 def, cdef, cpdef
+
+Functions declared with def in a Cython file will be visible to the Python file that later imports the generated extension module.
+If the function is declared with cdef, it will not be visible to any Python code that imports it, and thus can only be used internally in the Cython file. The advantages are that the function calls are faster, and that types with no Python equivalent (e.g. pointers) can be used as arguments to the function.
+A function declared with cpdef will be visible as if it were declared with def, and simultaneously creates a cdef version. The cdef version is useful for the faster function calls, but as a whole a cpdef function can only take argument types that have a Python equivalent.
+
+11.6 Typed Memoryviews
+
+Typed memoryviews are especially useful for passing Python/Numpy arrays to Cython. They allow for a filtering of the array into a smaller subarray as if it were a multidimensional array, but maintain the extremely quick loading of that subarray in C.
+This becomes especially important for large, multidimensional arrays/matrices, which are notoriously slow in Python.
+
+12.1 Extension Types
+
+An extension type is a type of class written in Cython, which internally compiles to a class/struct in native C/C++, but displays itself as a Python class when imported into Python code.
+The extension type behaves almost just like a class written in pure Python, and seamlessly integrates into the Python code, but with C/C++ speeds.
+
+12.2 Data Fields of Extension Types
+
+Data fields in Python classes are stored in the __dict__ attribute of the class, and are internally implemented as a dictionary. When a field is requested via dot notation (class.field), then a method iterates over the dictionary to find the value corresponding to the field key, or throws an error if it can't be found.
+In extension types, the compilation to a class/struct in C/C++ means that the fields are instead allocated an appropriate amount of memory, and can be accessed in constant time via their pointer. This makes retrieving the value for a given field much faster.
+However, these fields must be declared upfront at the class level before they can be initialized, whereas Python can add additional fields to the dictionary at any point.
+In addition, data fields of extension types can be annotated with access levels for the Python code that imports them, including public (allows read/write), readonly (allows only read), or default behaviour with no annotation (not visible to the importing code).
+
+12.3 Wrapping C/C++ Code in Cython
+
+A simple step-by-step procedure is as follows:
+1. Create a .pyx file that will contain the wrapper for the code
+2. Include distutils directives for the Cython compiler: these include language (c or c++), sources (the source files to be wrapped), extra_compile_args (compiler flags that it should be compiled with), and extra_link_args (libraries that should be linked in the compilation)
+3. Include Cython-specific directives (examples being language_level for the python version or the directives in 11.4)
+4. Import the data types used in the arguments of functions we wish to include from the header
+5. Import the signatures of functions we wish to include from the header using cdef extern
+6. Expose these imported signatures to Python code by defining a Python function using def and calling the imported function
+
+13.1 Cells, Pages and Blocks
+
+Cells are the smallest possible storage unit of an SSD. They have a value depending on the current voltage stored by the cell, delimited by thresholds. An SLC will define a single threshold and store a single bit, MLCs will store 2 bits, TLCs 3 bits, and QLCs 4 bits.
+The less bits a cell stores, the more durable it is, as the probability of it's value accidentally going over/under a threshold it shouldn't is reduced.
+
+Pages are the smallest storage unit that can be read or written on an SSD, and consist of multiple cells, typically summing up to 4KB of storage. A page cannot be overwritten, and must instead be completely erased before it can be rewritten.
+A page that should be updated is instead copied entirely to a new page with the update, and the old page is marked as stale (invalid), indicating that it should be erased.
+
+Blocks are the smalles storage units that can be erased on an SSD, and consist of multiple pages, typically 128 or 256 pages (totaling 512KB or 1MB of storage).
+When a block contains many stale pages, it will be erased by first copying over all good pages to another block, and then erasing the entire block, leaving the entire block free for new pages.
+
+13.2 Garbage Collection
+
+Garbage collection is the step or erasing described for blocks in 13.1. It ensures that space can be freed up for writing as the number of free pages is reduced, and can move related data segments next to each other for optimised IO when it copies the good pages out before erasing.
+
+13.3 Wear Leveling
+
+Wear leveling is a technique to ensure that the SSD wears out roughly evenly, extending its lifespan. To do this, blocks which are erased and rewritten less often (due to having long-lasting data) will be rewritten onto a more frequently used block, and the original block erased and freed up for writing.
+
+13.4 M.2 Form Factor
+
+SSDs interface to the host via a physical interface, such as the older SATA (which is in current use by HDDs) or the new PCIe.
+While M.2 is often a prefix used for an SSD, it does not indicate which interface it uses (or whether it is an SSD at all), M.2 form factors are in use by both of the above interfaces.
+Threre are multiple different types of keys in use by the M.2 form factor, which define which slots are open (not connected) to the interface.
+
+13.5 Write Amplification of Garbage Collection and Wear Leveling
+
+Both Garbage Collection and Wear Leveling write and erase pages without the user specifically requesting it. The ratio of total page writes vs. the actual requested page writes over the lifetime of an SSD is its write amplification, and this number should optimally be kept as low as possible.
+Although both techniques are indespensible to extending the lifespan of an SSD and having it function at all, care must be taken to minimize the amount of page writes to ensure that it doesn't instead reduce the lifespan.
+
+13.6 Recommendations for SSD-Friendly Code
+
+Similarly to the logic behind cache lines, related data should be stored on the same page so that all the data can be retrieved and processed with a minimum of page reads and writes. This is especially important for writes, as any update will rewrite the whole page.
+To this end, the data structures should be as compact as possible.
+
+Due to the fact that a stale page must be erased before it can be rewritten, when an SSD approaches the limits of its memory, the frequency of garbage collection needing to be performed dramatically increases.
+This is both slow and detrimental to the lifespan of an SSD, due to the sharp uptick in write amplification. Therefore, full SSD usage should be strictly avoided.
+
+Due to the FTL being designed in such a way to exploit as many concurrency techniques as possible when performing IO, the task of concurrency for large chunks of IO should be left to the FTL in a just a few threads, rather than attempting to multi-thread it from the application.
+Creating a large amount of threads can instead decrease the throughput of IO, because the FTL cannot use its innate optimizations to their fullest extent.
+
+13.7 Reducing CPU Load for IO
+
+When performing IO on SSDs at near-RAM speeds, there are two promising methods to reduce CPU load:
+1. Using asynchronous rather than blocking IO system calls will allow the CPU to continue processing other data while the new data is being loaded in.
+2. Disabling OS buffering will prevent the OS from loading data into RAM and caches, significantly reducing the overhead for IO.
+
+13.8 Problems Larger than DRAM
+
+For problems larger than the available DRAM, the approach of using an SSD as a form of large RAM can be considered.
+By using memory mapped files to store data on the SSD, the data can quickly and efficiently be read and written an near-RAM speeds, allowing for quick processing on huge datasets despite a limited amount of DRAM.

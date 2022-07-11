@@ -1,0 +1,1 @@
+/usr/bin/g++  -Ofast -march=native -ffast-math -std=c++11 -fopenmp -O3 -DNDEBUG CMakeFiles/groupsplit.dir/groupsplit.cpp.o -o groupsplit 
